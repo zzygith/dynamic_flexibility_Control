@@ -100,6 +100,13 @@ class DeepSVDDTrainer(BaseTrainer):
             for data in train_loader:
                 inputs, _, _ = data
                 inputs = inputs.to(self.device)
+                expanedInput=inputs.repeat(1,nU).reshape(-1,2)#2即输入状态的维度数量,100即随机U的数量
+                #uRandom=np.random.uniform(uRangeLow,uRangeHigh,size=(nU,uLength))
+                uRandom=torch.tensor(np.random.uniform(uRangeLow,uRangeHigh,size=(nU*inputs.shape[0],uLength)),dtype=torch.float32).to(self.device)
+                expandedInputAndU=torch.cat((expanedInput,uRandom),1)
+                exStates=stateModel(expandedInputAndU)
+                exStates.reshape(-1,nU,5)#5是状态的数量
+                logger.info(exStates)
 
                 inputsTheta=inputs.cpu().detach().numpy()
                 #inputsTheta=inputsTheta.flatten()[0]
