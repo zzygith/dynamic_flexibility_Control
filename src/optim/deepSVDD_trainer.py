@@ -356,30 +356,68 @@ class DeepSVDDTrainer(BaseTrainer):
                 return constResultsReluSum2
             return constraint        
 
+
         elif dataForConstraintsChoice=='mine_reactorCooler_5d':
-            def constraint(theta,z,stateModel):
-                flag=False
+            def constraint(thetaZStates,nUconstraint):
+                constResults=torch.zeros([thetaZStates.shape[0],nUconstraint,6], dtype=torch.float32).to(self.device)#6是const的数量
                 Ca0=32.04
-                #stateInput=torch.tensor(np.array([theta.flatten(),z])).to(self.device)
-                #stateInput=torch.tensor(np.append(theta.flatten()/10.0,z.flatten()),dtype=torch.float32).to(self.device)
-                #stateInput = torch.tensor(np.append( [a/b for a,b in zip(theta.flatten(),[10.0,10.0,100.0,100.0,1.0])], z.flatten()), dtype=torch.float32).to(self.device)
-                stateInput = torch.tensor(np.append(theta.flatten(), z.flatten()), dtype=torch.float32).to(self.device)
-                #states=stateModel(stateInput).cpu().detach().numpy().flatten()
-                states=stateModel(stateInput)
-                states=torch.flatten(states)
-                Tw1 = stateInput[2] * 100.0
-                Tw2=stateInput[6]*100.0
-                Ca1=states[0]
-                T1=states[1]*10+390.
-                T2=states[2]*10+300.
-                constraint1=(Ca0-Ca1)/Ca0
-                constraint3=T1-T2
-                constraint4=T1-Tw2-11.1
-                constraint5=T2-Tw1-11.1
-                if constraint1>=0.9 and T1>=311 and T1<=389 and constraint3>=0 and constraint4>=0 and constraint5>=0:
-                     flag=True
-                return flag
-            return constraint
+                #Tw1=300.0
+                Tw1=thetaZStates[:,:,2:3]*100.0
+                Tw2=thetaZStates[:,:,6:7]*100.0
+                Ca1=thetaZStates[:,:,7:8]
+                T1=thetaZStates[:,:,8:9]*10+390.
+                T2=thetaZStates[:,:,9:10]*10+300.
+                constraint1=0.9-(Ca0-Ca1)/Ca0
+                constraint2=311-T1
+                constraint3=T1-389
+                constraint4=T2-T1
+                constraint5=Tw2-T1+11.1
+                constraint6=Tw1-T2+11.1
+                constResults[:,:,0:1]=constraint1
+                constResults[:,:,1:2]=constraint2
+                constResults[:,:,2:3]=constraint3
+                constResults[:,:,3:4]=constraint4
+                constResults[:,:,4:5]=constraint5
+                constResults[:,:,5:6]=constraint6
+                constResultsRelu=torch.relu(constResults)
+                # constResultFlag=constResultsRelu.clone()
+                # constResultFlag[constResultFlag==0]=1
+                # constResultFlag[constResultFlag!=0]=0
+
+                constResultsReluSum1=torch.sum(constResultsRelu,dim=2)
+                #constResultsReluSum2=torch.sum(constResultsReluSum1,dim=1)
+                constResultsReluSum2=torch.prod(constResultsReluSum1,dim=1)
+                return constResultsReluSum2
+            return constraint     
+
+
+
+
+
+        # elif dataForConstraintsChoice=='mine_reactorCooler_5d':
+        #     def constraint(theta,z,stateModel):
+        #         flag=False
+        #         Ca0=32.04
+        #         #stateInput=torch.tensor(np.array([theta.flatten(),z])).to(self.device)
+        #         #stateInput=torch.tensor(np.append(theta.flatten()/10.0,z.flatten()),dtype=torch.float32).to(self.device)
+        #         #stateInput = torch.tensor(np.append( [a/b for a,b in zip(theta.flatten(),[10.0,10.0,100.0,100.0,1.0])], z.flatten()), dtype=torch.float32).to(self.device)
+        #         stateInput = torch.tensor(np.append(theta.flatten(), z.flatten()), dtype=torch.float32).to(self.device)
+        #         #states=stateModel(stateInput).cpu().detach().numpy().flatten()
+        #         states=stateModel(stateInput)
+        #         states=torch.flatten(states)
+        #         Tw1 = stateInput[2] * 100.0
+        #         Tw2=stateInput[6]*100.0
+        #         Ca1=states[0]
+        #         T1=states[1]*10+390.
+        #         T2=states[2]*10+300.
+        #         constraint1=(Ca0-Ca1)/Ca0
+        #         constraint3=T1-T2
+        #         constraint4=T1-Tw2-11.1
+        #         constraint5=T2-Tw1-11.1
+        #         if constraint1>=0.9 and T1>=311 and T1<=389 and constraint3>=0 and constraint4>=0 and constraint5>=0:
+        #              flag=True
+        #         return flag
+        #     return constraint
 
 
 
