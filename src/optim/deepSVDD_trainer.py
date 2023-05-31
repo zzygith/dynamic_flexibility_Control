@@ -58,11 +58,24 @@ class DeepSVDDTrainer(BaseTrainer):
             uRangeLow=0
             uRangeHigh=250
             uLength=1
-        elif self.dataForConstraints=='mine_reactorCooler_2d' or self.dataForConstraints=='mine_reactorCooler_5d':
+        elif self.dataForConstraints=='mine_reactorCooler_2d':
             nU=100
             uRangeLow = [0,3.00]
             uRangeHigh = [6.804,3.56]
             uLength=2
+            ######added
+            thetaNumber=2
+            predictionStateNumber=5
+
+        elif  self.dataForConstraints=='mine_reactorCooler_5d':
+            nU=100
+            uRangeLow = [0,3.00]
+            uRangeHigh = [6.804,3.56]
+            uLength=2
+            ######added
+            thetaNumber=5
+            predictionStateNumber=5
+
 
         logger = logging.getLogger()
         # Set device for network
@@ -100,13 +113,17 @@ class DeepSVDDTrainer(BaseTrainer):
             for data in train_loader:
                 inputs, _, _ = data
                 inputs = inputs.to(self.device)
-                expanedInput=inputs.repeat(1,nU).reshape(-1,2)#2即输入状态的维度数量,100即随机U的数量
+                expanedInput=inputs.repeat(1,nU).reshape(-1,thetaNumber)#2即输入theta的维度数量,100即随机U的数量
                 #uRandom=np.random.uniform(uRangeLow,uRangeHigh,size=(nU,uLength))
                 uRandom=torch.tensor(np.random.uniform(uRangeLow,uRangeHigh,size=(nU*inputs.shape[0],uLength)),dtype=torch.float32).to(self.device)
                 expandedInputAndU=torch.cat((expanedInput,uRandom),1)
                 exStates=stateModel(expandedInputAndU)
-                exStates.reshape(-1,nU,5)#5是状态的数量
-                logger.info(exStates)
+                exStatesInputAndU=torch.cat((expandedInputAndU,exStates),1)
+                exStatesInputAndU=exStatesInputAndU.reshape(-1,nU,uLength+thetaNumber+predictionStateNumber)#5是状态的数量,2即输入状态的维度数量,2是u的维度数量                
+                distConstrainFlagTensor=constraintsFunc(exStatesInputAndU,nU)
+                ####check the satisfied theta
+                #losses=torch.where(distConstrainFlagTensor == 0, self.satisfiedP*dist, self.eta * ((dist + self.eps)**self.penalty))
+                #logger.info(exStatesInputAndU)
 
                 inputsTheta=inputs.cpu().detach().numpy()
                 #inputsTheta=inputsTheta.flatten()[0]
@@ -119,43 +136,44 @@ class DeepSVDDTrainer(BaseTrainer):
                 dist = torch.sum((outputs - self.c) ** 2, dim=1)
 
                 distArray = dist.cpu().detach().numpy()
-                distConstrainFlag=np.zeros_like(distArray)
-                for i in range(0,len(distConstrainFlag)):
-                    satisfiedNum=0
-                    # nU=300
-                    # uRangeLow=0
-                    # uRangeHigh=3
+##################################################################################               
+                # distConstrainFlag=np.zeros_like(distArray)
+                # for i in range(0,len(distConstrainFlag)):
+                #     satisfiedNum=0
+                #     # nU=300
+                #     # uRangeLow=0
+                #     # uRangeHigh=3
 
-                    # if dataForConstraintsChoice=='mine':
-                    # nU=50
-                    # uRangeLow=0
-                    # uRangeHigh=250
-                    # uRandom=np.random.uniform(uRangeLow,uRangeHigh,nU)
+                #     # if dataForConstraintsChoice=='mine':
+                #     # nU=50
+                #     # uRangeLow=0
+                #     # uRangeHigh=250
+                #     # uRandom=np.random.uniform(uRangeLow,uRangeHigh,nU)
 
-                    # nU=50
-                    # U_min = [0,3.00]
-                    # U_max = [6.804,3.56]
-                    # uRandom = np.random.uniform(low=U_min, high=U_max, size=(nU,2))
+                #     # nU=50
+                #     # U_min = [0,3.00]
+                #     # U_max = [6.804,3.56]
+                #     # uRandom = np.random.uniform(low=U_min, high=U_max, size=(nU,2))
 
-                    uRandom=np.random.uniform(uRangeLow,uRangeHigh,size=(nU,uLength))
+                #     uRandom=np.random.uniform(uRangeLow,uRangeHigh,size=(nU,uLength))
 
-                    for k in uRandom:
-                        #if self.condition(inputsTheta[i],k):
-                        if constraintsFunc(inputsTheta[i],k,stateModel):
-                            #satisfiedNum=satisfiedNum+1
-                            satisfiedNum=1
-                            break
-                    distConstrainFlag[i]=satisfiedNum
+                #     for k in uRandom:
+                #         #if self.condition(inputsTheta[i],k):
+                #         if constraintsFunc(inputsTheta[i],k,stateModel):
+                #             #satisfiedNum=satisfiedNum+1
+                #             satisfiedNum=1
+                #             break
+                #     distConstrainFlag[i]=satisfiedNum
 
-                distConstrainFlagTensor=torch.tensor(distConstrainFlag).to(self.device)
-                ####check the satisfied theta
-                # logger.info(distConstrainFlagTensor)
+                # distConstrainFlagTensor=torch.tensor(distConstrainFlag).to(self.device)
+                # ####check the satisfied theta
+                # # logger.info(distConstrainFlagTensor)
 
-                # satisfiedTheta = torch.where(distConstrainFlagTensor > 0, torch.flatten(inputs[:,0]), distConstrainFlagTensor)
+                # # satisfiedTheta = torch.where(distConstrainFlagTensor > 0, torch.flatten(inputs[:,0]), distConstrainFlagTensor)
 
-                #losses=torch.where(distConstrainFlagTensor > 0, self.satisfiedP*dist*distConstrainFlagTensor, self.eta * ((dist + self.eps)**self.penalty))
-                losses=torch.where(distConstrainFlagTensor > 0, self.satisfiedP*dist, self.eta * ((dist + self.eps)**self.penalty))
-
+                # #losses=torch.where(distConstrainFlagTensor > 0, self.satisfiedP*dist*distConstrainFlagTensor, self.eta * ((dist + self.eps)**self.penalty))
+                # losses=torch.where(distConstrainFlagTensor > 0, self.satisfiedP*dist, self.eta * ((dist + self.eps)**self.penalty))
+##############################################################################################################################################
                 # logger.info(satisfiedTheta)
                 # logger.info(losses)
                 
@@ -163,7 +181,7 @@ class DeepSVDDTrainer(BaseTrainer):
                 #     logger.info(satisfiedTheta)  
                 #     logger.info(dist)
                 #     logger.info(losses)     
-
+                losses=torch.where(distConstrainFlagTensor > 0, self.eta * ((dist + self.eps)**self.penalty),self.satisfiedP*dist)                
                 loss = torch.mean(losses)
 
                 # nU=3
@@ -236,49 +254,7 @@ class DeepSVDDTrainer(BaseTrainer):
         return net
 
     def test(self, dataset: BaseADDataset, net: BaseNet):
-        logger = logging.getLogger()
-
-        # Set device for network
-        net = net.to(self.device)
-
-        # Get test data loader
-        _, test_loader = dataset.loaders(batch_size=self.batch_size, num_workers=self.n_jobs_dataloader)
-
-        # Testing
-        logger.info('Starting testing...')
-        start_time = time.time()
-        idx_label_score = []
-        net.eval()
-        with torch.no_grad():
-            for data in test_loader:
-                inputs, labels, idx = data
-                inputs = inputs.to(self.device)
-                outputs = net(inputs)
-                dist = torch.sum((outputs - self.c) ** 2, dim=1)
-                if self.objective == 'soft-boundary':
-                    scores = dist - self.R ** 2
-                else:
-                    scores = dist
-
-                # Save triples of (idx, label, score) in a list
-                idx_label_score += list(zip(idx.cpu().data.numpy().tolist(),
-                                            labels.cpu().data.numpy().tolist(),
-                                            scores.cpu().data.numpy().tolist()))
-
-        self.test_time = time.time() - start_time
-        logger.info('Testing time: %.3f' % self.test_time)
-
-        self.test_scores = idx_label_score
-
-        # Compute AUC
-        _, labels, scores = zip(*idx_label_score)
-        labels = np.array(labels)
-        scores = np.array(scores)
-
-        self.test_auc = roc_auc_score(labels, scores)
-        logger.info('Test set AUC: {:.2f}%'.format(100. * self.test_auc))
-
-        logger.info('Finished testing.')
+        pass
 
 
 
@@ -320,9 +296,8 @@ class DeepSVDDTrainer(BaseTrainer):
     #             return flag
     #         return constraint
 
-
-
-
+##############################################################################
+########speed up 后
     def conditionFunctionList(self,dataForConstraintsChoice):
         if dataForConstraintsChoice=='mine':
             def constraint(theta,z,stateModel):
@@ -350,26 +325,35 @@ class DeepSVDDTrainer(BaseTrainer):
             return constraint
         
         elif dataForConstraintsChoice=='mine_reactorCooler_2d':
-            def constraint(theta,z,stateModel):
-                flag=False
+            def constraint(thetaZStates,nUconstraint):
+                constResults=torch.zeros([thetaZStates.shape[0],nUconstraint,6], dtype=torch.float32).to(self.device)#6是const的数量
                 Ca0=32.04
                 Tw1=300.0
-                #stateInput=torch.tensor(np.array([theta.flatten(),z])).to(self.device)
-                stateInput=torch.tensor(np.append(theta.flatten(),z.flatten()),dtype=torch.float32).to(self.device)
-                #states=stateModel(stateInput).cpu().detach().numpy().flatten()
-                states=stateModel(stateInput)
-                states=torch.flatten(states)
-                Tw2=stateInput[3]*100.0
-                Ca1=states[0]
-                T1=states[1]*10+390.
-                T2=states[2]*10+300.
-                constraint1=(Ca0-Ca1)/Ca0
-                constraint3=T1-T2
-                constraint4=T1-Tw2-11.1
-                constraint5=T2-Tw1-11.1
-                if constraint1>=0.9 and T1>=311 and T1<=389 and constraint3>=0 and constraint4>=0 and constraint5>=0:
-                     flag=True
-                return flag                   
+                Tw2=thetaZStates[:,:,3:4]*100.0
+                Ca1=thetaZStates[:,:,4:5]
+                T1=thetaZStates[:,:,5:6]*10+390.
+                T2=thetaZStates[:,:,6:7]*10+300.
+                constraint1=0.9-(Ca0-Ca1)/Ca0
+                constraint2=311-T1
+                constraint3=T1-389
+                constraint4=T2-T1
+                constraint5=Tw2-T1+11.1
+                constraint6=Tw1-T2+11.1
+                constResults[:,:,0:1]=constraint1
+                constResults[:,:,1:2]=constraint2
+                constResults[:,:,2:3]=constraint3
+                constResults[:,:,3:4]=constraint4
+                constResults[:,:,4:5]=constraint5
+                constResults[:,:,5:6]=constraint6
+                constResultsRelu=torch.relu(constResults)
+                # constResultFlag=constResultsRelu.clone()
+                # constResultFlag[constResultFlag==0]=1
+                # constResultFlag[constResultFlag!=0]=0
+
+                constResultsReluSum1=torch.sum(constResultsRelu,dim=2)
+                #constResultsReluSum2=torch.sum(constResultsReluSum1,dim=1)
+                constResultsReluSum2=torch.prod(constResultsReluSum1,dim=1)
+                return constResultsReluSum2
             return constraint        
 
         elif dataForConstraintsChoice=='mine_reactorCooler_5d':
@@ -397,6 +381,9 @@ class DeepSVDDTrainer(BaseTrainer):
                 return flag
             return constraint
 
+
+
+###############################################################################
 
     def stateModelFunction(self,dataForConstraintsChoice):
         if dataForConstraintsChoice=='mine':
