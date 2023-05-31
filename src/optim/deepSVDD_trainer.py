@@ -58,6 +58,10 @@ class DeepSVDDTrainer(BaseTrainer):
             uRangeLow=0
             uRangeHigh=250
             uLength=1
+            ######added
+            thetaNumber=1
+            predictionStateNumber=3
+
         elif self.dataForConstraints=='mine_reactorCooler_2d':
             nU=100
             uRangeLow = [0,3.00]
@@ -307,23 +311,55 @@ class DeepSVDDTrainer(BaseTrainer):
                 return flag
             return constraint
 
-        elif dataForConstraintsChoice=='mine_heater_1d':
-            def constraint(theta,z,stateModel):
-                flag=False
-                #stateInput=torch.tensor(np.array([theta.flatten(),z])).to(self.device)
-                stateInput=torch.tensor(np.append(theta.flatten(),z),dtype=torch.float32).to(self.device)
-                #states=stateModel(stateInput).cpu().detach().numpy().flatten()
-                states=stateModel(stateInput)
-                states=torch.flatten(states)
-                t1=states[0]
-                t2=states[1]
-                t3=states[2]
-                #t4=states[3]
-                if t2-t1>=0 and t2-393>=0 and t3-313>=0 and t3<=323:
-                     flag=True
-                return flag                   
-            return constraint
+        # elif dataForConstraintsChoice=='mine_heater_1d':
+        #     def constraint(theta,z,stateModel):
+        #         flag=False
+        #         #stateInput=torch.tensor(np.array([theta.flatten(),z])).to(self.device)
+        #         stateInput=torch.tensor(np.append(theta.flatten(),z),dtype=torch.float32).to(self.device)
+        #         #states=stateModel(stateInput).cpu().detach().numpy().flatten()
+        #         states=stateModel(stateInput)
+        #         states=torch.flatten(states)
+        #         t1=states[0]
+        #         t2=states[1]
+        #         t3=states[2]
+        #         #t4=states[3]
+        #         if t2-t1>=0 and t2-393>=0 and t3-313>=0 and t3<=323:
+        #              flag=True
+        #         return flag                   
+        #     return constraint
         
+        elif dataForConstraintsChoice=='mine_heater_1d':
+            def constraint(thetaZStates,nUconstraint):
+                constResults=torch.zeros([thetaZStates.shape[0],nUconstraint,4], dtype=torch.float32).to(self.device)#6是const的数量
+                t1=thetaZStates[:,:,2:3]
+                t2=thetaZStates[:,:,3:4]
+                t3=thetaZStates[:,:,4:5]
+
+
+                constraint1=t1-t2
+                constraint2=393-t2
+                constraint3=313-t3
+                constraint4=t3-323
+
+                constResults[:,:,0:1]=constraint1
+                constResults[:,:,1:2]=constraint2
+                constResults[:,:,2:3]=constraint3
+                constResults[:,:,3:4]=constraint4                
+
+                constResultsRelu=torch.relu(constResults)
+                # constResultFlag=constResultsRelu.clone()
+                # constResultFlag[constResultFlag==0]=1
+                # constResultFlag[constResultFlag!=0]=0
+
+                constResultsReluSum1=torch.sum(constResultsRelu,dim=2)
+                #constResultsReluSum2=torch.sum(constResultsReluSum1,dim=1)
+                constResultsReluSum2=torch.prod(constResultsReluSum1,dim=1)
+                return constResultsReluSum2
+            return constraint        
+
+
+
+
         elif dataForConstraintsChoice=='mine_reactorCooler_2d':
             def constraint(thetaZStates,nUconstraint):
                 constResults=torch.zeros([thetaZStates.shape[0],nUconstraint,6], dtype=torch.float32).to(self.device)#6是const的数量
