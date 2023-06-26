@@ -63,7 +63,8 @@ class DeepSVDDTrainer(BaseTrainer):
             predictionStateNumber=3
 
         elif self.dataForConstraints=='mine_reactorCooler_2d':
-            nU=100
+            #nU=100
+            nU=400
             uRangeLow = [0,3.00]
             uRangeHigh = [6.804,3.56]
             uLength=2
@@ -72,7 +73,8 @@ class DeepSVDDTrainer(BaseTrainer):
             predictionStateNumber=5
 
         elif  self.dataForConstraints=='mine_reactorCooler_5d':
-            nU=100
+            #nU=100
+            nU=400
             uRangeLow = [0,3.00]
             uRangeHigh = [6.804,3.56]
             uLength=2
