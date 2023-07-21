@@ -60,7 +60,7 @@ class DeepSVDDTrainer(BaseTrainer):
             uLength=1
             ######added
             thetaNumber=1
-            predictionStateNumber=3
+            predictionStateNumber=4
 
         elif self.dataForConstraints=='mine_reactorCooler_2d':
             #nU=100
