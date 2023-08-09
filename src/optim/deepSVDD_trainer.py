@@ -12,6 +12,7 @@ import numpy as np
 from .heaterExchangerState import HENState
 from .reactorCooler2dState import RC2DState
 from .reactorCooler5dState import RC5DState
+from .buffer1dState_NoControl import Buffer
 
 class DeepSVDDTrainer(BaseTrainer):
 
@@ -81,6 +82,15 @@ class DeepSVDDTrainer(BaseTrainer):
             ######added
             thetaNumber=5
             predictionStateNumber=5
+
+        elif self.dataForConstraints=='mine_dynamic_1dtheta_noControl':
+            nU=1600
+            uRangeLow=0
+            uRangeHigh=800
+            uLength=1
+            ######added
+            thetaNumber=1
+            predictionStateNumber=1
 
 
         logger = logging.getLogger()
@@ -332,7 +342,7 @@ class DeepSVDDTrainer(BaseTrainer):
         
         elif dataForConstraintsChoice=='mine_heater_1d':
             def constraint(thetaZStates,nUconstraint):
-                constResults=torch.zeros([thetaZStates.shape[0],nUconstraint,4], dtype=torch.float32).to(self.device)#6是const的数量
+                constResults=torch.zeros([thetaZStates.shape[0],nUconstraint,4], dtype=torch.float32).to(self.device)#4是const的数量,即predictionStateNumber
                 t1=thetaZStates[:,:,2:3]
                 t2=thetaZStates[:,:,3:4]
                 t3=thetaZStates[:,:,4:5]
@@ -429,7 +439,34 @@ class DeepSVDDTrainer(BaseTrainer):
             return constraint     
 
 
+        elif dataForConstraintsChoice=='mine_dynamic_1dtheta_noControl':
+            def constraint(thetaZStates,nUconstraint):
+                constResults=torch.zeros([thetaZStates.shape[0],nUconstraint,2], dtype=torch.float32).to(self.device)#1是const的数量
+                h=thetaZStates[:,:,2:3]
+                # t2=thetaZStates[:,:,3:4]
+                # t3=thetaZStates[:,:,4:5]
 
+
+                constraint1=1-h
+                constraint2=h-10
+                # constraint3=313-t3
+                # constraint4=t3-323
+
+                constResults[:,:,0:1]=constraint1
+                constResults[:,:,1:2]=constraint2
+                # constResults[:,:,2:3]=constraint3
+                # constResults[:,:,3:4]=constraint4                
+
+                constResultsRelu=torch.relu(constResults)
+                # constResultFlag=constResultsRelu.clone()
+                # constResultFlag[constResultFlag==0]=1
+                # constResultFlag[constResultFlag!=0]=0
+
+                constResultsReluSum1=torch.sum(constResultsRelu,dim=2)
+                #constResultsReluSum2=torch.prod(constResultsReluSum1,dim=1)
+                constResultsReluSum2=torch.sum(constResultsReluSum1,dim=1)
+                return constResultsReluSum2
+            return constraint   
 
 
         # elif dataForConstraintsChoice=='mine_reactorCooler_5d':
@@ -487,7 +524,12 @@ class DeepSVDDTrainer(BaseTrainer):
             RC5DStateModel = RC5DState().to(self.device)
             RC5DStateModel.load_state_dict(torch.load(dataRoot))
             return RC5DStateModel
-
+        
+        elif dataForConstraintsChoice == 'mine_dynamic_1dtheta_noControl':
+            dataRoot = './optim/buffer_noControl.pt'
+            BF1DStateModel = Buffer().to(self.device)
+            BF1DStateModel.load_state_dict(torch.load(dataRoot))
+            return BF1DStateModel
 
             # def init_center_c(self, train_loader: DataLoader, net: BaseNet, eps=0.1):
     #     """Initialize hypersphere center c as the mean from an initial forward pass on the data."""
