@@ -133,6 +133,9 @@ class DeepSVDDTrainer(BaseTrainer):
                 #uRandom=np.random.uniform(uRangeLow,uRangeHigh,size=(nU,uLength))
                 uRandom=torch.tensor(np.random.uniform(uRangeLow,uRangeHigh,size=(nU*inputs.shape[0],uLength)),dtype=torch.float32).to(self.device)
                 expandedInputAndU=torch.cat((expanedInput,uRandom),1)
+
+
+                
                 exStates=stateModel(expandedInputAndU)
                 exStatesInputAndU=torch.cat((expandedInputAndU,exStates),1)
                 exStatesInputAndU=exStatesInputAndU.reshape(-1,nU,uLength+thetaNumber+predictionStateNumber)#5是状态的数量,2即输入状态的维度数量,2是u的维度数量                
