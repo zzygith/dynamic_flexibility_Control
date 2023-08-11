@@ -95,7 +95,7 @@ class DeepSVDDTrainer(BaseTrainer):
             predictionStateNumber=1
 
         elif self.dataForConstraints=='mine_dynamic_1dtheta_Control':
-            nU=50 # 把每个theta重复的次数,即每个theta对应多少个U
+            nU=20 # 把每个theta重复的次数,即每个theta对应多少个U
             uRangeLow=0
             uRangeHigh=5**0.5/10
             uLength=1
