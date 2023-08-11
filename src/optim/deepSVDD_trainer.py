@@ -349,7 +349,7 @@ class DeepSVDDTrainer(BaseTrainer):
 
         if dataForConstraintsChoice=='mine_dynamic_1dtheta_Control':
             def constraint(exStatesInputAndUAndT):
-                constResults=torch.zeros([exStatesInputAndUAndT.shape[0],exStatesInputAndUAndT.shape[1],exStatesInputAndUAndT.shape[2],2], dtype=torch.float32) #2是const的数量,即predictionStateNumber.to(self.device)#1是const的数量
+                constResults=torch.zeros([exStatesInputAndUAndT.shape[0],exStatesInputAndUAndT.shape[1],exStatesInputAndUAndT.shape[2],2], dtype=torch.float32).to(self.device) #2是const的数量,即predictionStateNumber.to(self.device)#1是const的数量
                 h=exStatesInputAndUAndT[:,:,:,3:4]
                 constraint1=1-h
                 constraint2=h-10
