@@ -16,7 +16,7 @@ def load_dataset(dataset_name, data_path, normal_class):
     if dataset_name == 'cifar10':
         dataset = CIFAR10_Dataset(root=data_path, normal_class=normal_class)
 
-    if dataset_name == 'mine' or dataset_name == 'mine_heater_1d' or dataset_name =='mine_dynamic_1dtheta_noControl':
+    if dataset_name == 'mine' or dataset_name == 'mine_heater_1d' or dataset_name =='mine_dynamic_1dtheta_noControl'or dataset_name =='mine_dynamic_1dtheta_Control':
         dataset = MINE_Dataset(root=data_path, normal_class=normal_class)
 
     if dataset_name == 'mine_reactorCooler_2d' or dataset_name == 'mine_reactorCooler_5d':

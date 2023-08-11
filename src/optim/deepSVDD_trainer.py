@@ -13,6 +13,8 @@ from .heaterExchangerState import HENState
 from .reactorCooler2dState import RC2DState
 from .reactorCooler5dState import RC5DState
 from .buffer1dState_NoControl import Buffer
+from .buffer1dState_Control import BufferControl
+
 
 class DeepSVDDTrainer(BaseTrainer):
 
@@ -92,6 +94,17 @@ class DeepSVDDTrainer(BaseTrainer):
             thetaNumber=1
             predictionStateNumber=1
 
+        elif self.dataForConstraints=='mine_dynamic_1dtheta_Control':
+            nU=50 # 把每个theta重复的次数,即每个theta对应多少个U
+            uRangeLow=0
+            uRangeHigh=5**0.5/10
+            uLength=1
+            ######added
+            thetaNumber=1
+            predictionStateNumber=1
+            tRangeLow=0
+            tRangeHigh=800
+            nTime=1600 # 把每个thetaAndU组合重复的次数,即每个thetaAndU组合对应多少个T
 
         logger = logging.getLogger()
         # Set device for network
@@ -134,12 +147,20 @@ class DeepSVDDTrainer(BaseTrainer):
                 uRandom=torch.tensor(np.random.uniform(uRangeLow,uRangeHigh,size=(nU*inputs.shape[0],uLength)),dtype=torch.float32).to(self.device)
                 expandedInputAndU=torch.cat((expanedInput,uRandom),1)
 
+                expandedInputAndUWaitingForT=expandedInputAndU.repeat(1,nTime).reshape(-1,nTime,uLength+thetaNumber)
+                tRandom=torch.tensor(np.random.uniform(tRangeLow,tRangeHigh,size=(expandedInputAndUWaitingForT.shape[0],nTime,1)),dtype=torch.float32).to(self.device)
+                expandedInputAndUAndT=torch.cat((expandedInputAndUWaitingForT,tRandom),2)
+                ######
+                expandedInputAndUAndTReForNN=expandedInputAndUAndT.reshape(-1,uLength+thetaNumber+1) # timeT 只有1维
+                exStates=stateModel(expandedInputAndUAndTReForNN).reshape(-1,nTime,predictionStateNumber)
+                exStatesInputAndUAndT=torch.cat((expandedInputAndUAndT,exStates),2).reshape(-1,nU,nTime,uLength+thetaNumber+1+predictionStateNumber)
+                distConstrainFlagTensor=constraintsFunc(exStatesInputAndUAndT)
 
-                
-                exStates=stateModel(expandedInputAndU)
-                exStatesInputAndU=torch.cat((expandedInputAndU,exStates),1)
-                exStatesInputAndU=exStatesInputAndU.reshape(-1,nU,uLength+thetaNumber+predictionStateNumber)#5是状态的数量,2即输入状态的维度数量,2是u的维度数量                
-                distConstrainFlagTensor=constraintsFunc(exStatesInputAndU,nU)
+                # exStates=stateModel(expandedInputAndU)
+                # exStatesInputAndU=torch.cat((expandedInputAndU,exStates),1)
+                # exStatesInputAndU=exStatesInputAndU.reshape(-1,nU,uLength+thetaNumber+predictionStateNumber)#5是状态的数量,2即输入状态的维度数量,2是u的维度数量                
+                # distConstrainFlagTensor=constraintsFunc(exStatesInputAndU,nU)
+
                 ####check the satisfied theta
                 #losses=torch.where(distConstrainFlagTensor == 0, self.satisfiedP*dist, self.eta * ((dist + self.eps)**self.penalty))
                 #logger.info(exStatesInputAndU)
@@ -318,148 +339,24 @@ class DeepSVDDTrainer(BaseTrainer):
 ##############################################################################
 ########speed up 后
     def conditionFunctionList(self,dataForConstraintsChoice):
-        if dataForConstraintsChoice=='mine':
-            def constraint(theta,z,stateModel):
-                flag=False
-                if z-theta<=0 and -z-theta/3+4/3<=0 and z+theta-4<=0:
-                    flag=True
-                return flag
-            return constraint
-
-        # elif dataForConstraintsChoice=='mine_heater_1d':
+        # if dataForConstraintsChoice=='mine':
         #     def constraint(theta,z,stateModel):
         #         flag=False
-        #         #stateInput=torch.tensor(np.array([theta.flatten(),z])).to(self.device)
-        #         stateInput=torch.tensor(np.append(theta.flatten(),z),dtype=torch.float32).to(self.device)
-        #         #states=stateModel(stateInput).cpu().detach().numpy().flatten()
-        #         states=stateModel(stateInput)
-        #         states=torch.flatten(states)
-        #         t1=states[0]
-        #         t2=states[1]
-        #         t3=states[2]
-        #         #t4=states[3]
-        #         if t2-t1>=0 and t2-393>=0 and t3-313>=0 and t3<=323:
-        #              flag=True
-        #         return flag                   
+        #         if z-theta<=0 and -z-theta/3+4/3<=0 and z+theta-4<=0:
+        #             flag=True
+        #         return flag
         #     return constraint
-        
-        elif dataForConstraintsChoice=='mine_heater_1d':
-            def constraint(thetaZStates,nUconstraint):
-                constResults=torch.zeros([thetaZStates.shape[0],nUconstraint,4], dtype=torch.float32).to(self.device)#4是const的数量,即predictionStateNumber
-                t1=thetaZStates[:,:,2:3]
-                t2=thetaZStates[:,:,3:4]
-                t3=thetaZStates[:,:,4:5]
 
-
-                constraint1=t1-t2
-                constraint2=393-t2
-                constraint3=313-t3
-                constraint4=t3-323
-
-                constResults[:,:,0:1]=constraint1
-                constResults[:,:,1:2]=constraint2
-                constResults[:,:,2:3]=constraint3
-                constResults[:,:,3:4]=constraint4                
-
-                constResultsRelu=torch.relu(constResults)
-                # constResultFlag=constResultsRelu.clone()
-                # constResultFlag[constResultFlag==0]=1
-                # constResultFlag[constResultFlag!=0]=0
-
-                constResultsReluSum1=torch.sum(constResultsRelu,dim=2)
-                #constResultsReluSum2=torch.sum(constResultsReluSum1,dim=1)
-                constResultsReluSum2=torch.prod(constResultsReluSum1,dim=1)
-                return constResultsReluSum2
-            return constraint        
-
-
-
-
-        elif dataForConstraintsChoice=='mine_reactorCooler_2d':
-            def constraint(thetaZStates,nUconstraint):
-                constResults=torch.zeros([thetaZStates.shape[0],nUconstraint,6], dtype=torch.float32).to(self.device)#6是const的数量
-                Ca0=32.04
-                Tw1=300.0
-                Tw2=thetaZStates[:,:,3:4]*100.0
-                Ca1=thetaZStates[:,:,4:5]
-                T1=thetaZStates[:,:,5:6]*10+390.
-                T2=thetaZStates[:,:,6:7]*10+300.
-                constraint1=0.9-(Ca0-Ca1)/Ca0
-                constraint2=311-T1
-                constraint3=T1-389
-                constraint4=T2-T1
-                constraint5=Tw2-T1+11.1
-                constraint6=Tw1-T2+11.1
-                constResults[:,:,0:1]=constraint1
-                constResults[:,:,1:2]=constraint2
-                constResults[:,:,2:3]=constraint3
-                constResults[:,:,3:4]=constraint4
-                constResults[:,:,4:5]=constraint5
-                constResults[:,:,5:6]=constraint6
-                constResultsRelu=torch.relu(constResults)
-                # constResultFlag=constResultsRelu.clone()
-                # constResultFlag[constResultFlag==0]=1
-                # constResultFlag[constResultFlag!=0]=0
-
-                constResultsReluSum1=torch.sum(constResultsRelu,dim=2)
-                #constResultsReluSum2=torch.sum(constResultsReluSum1,dim=1)
-                constResultsReluSum2=torch.prod(constResultsReluSum1,dim=1)
-                return constResultsReluSum2
-            return constraint        
-
-
-        elif dataForConstraintsChoice=='mine_reactorCooler_5d':
-            def constraint(thetaZStates,nUconstraint):
-                constResults=torch.zeros([thetaZStates.shape[0],nUconstraint,6], dtype=torch.float32).to(self.device)#6是const的数量
-                Ca0=32.04
-                #Tw1=300.0
-                Tw1=thetaZStates[:,:,2:3]*100.0
-                Tw2=thetaZStates[:,:,6:7]*100.0
-                Ca1=thetaZStates[:,:,7:8]
-                T1=thetaZStates[:,:,8:9]*10+390.
-                T2=thetaZStates[:,:,9:10]*10+300.
-                constraint1=0.9-(Ca0-Ca1)/Ca0
-                constraint2=311-T1
-                constraint3=T1-389
-                constraint4=T2-T1
-                constraint5=Tw2-T1+11.1
-                constraint6=Tw1-T2+11.1
-                constResults[:,:,0:1]=constraint1
-                constResults[:,:,1:2]=constraint2
-                constResults[:,:,2:3]=constraint3
-                constResults[:,:,3:4]=constraint4
-                constResults[:,:,4:5]=constraint5
-                constResults[:,:,5:6]=constraint6
-                constResultsRelu=torch.relu(constResults)
-                # constResultFlag=constResultsRelu.clone()
-                # constResultFlag[constResultFlag==0]=1
-                # constResultFlag[constResultFlag!=0]=0
-
-                constResultsReluSum1=torch.sum(constResultsRelu,dim=2)
-                #constResultsReluSum2=torch.sum(constResultsReluSum1,dim=1)
-                constResultsReluSum2=torch.prod(constResultsReluSum1,dim=1)
-                return constResultsReluSum2
-            return constraint     
-
-
-        elif dataForConstraintsChoice=='mine_dynamic_1dtheta_noControl':
-            def constraint(thetaZStates,nUconstraint):
-                constResults=torch.zeros([thetaZStates.shape[0],nUconstraint,2], dtype=torch.float32).to(self.device)#1是const的数量
-                h=thetaZStates[:,:,2:3]
-                # t2=thetaZStates[:,:,3:4]
-                # t3=thetaZStates[:,:,4:5]
-
-
+        if dataForConstraintsChoice=='mine_dynamic_1dtheta_Control':
+            def constraint(exStatesInputAndUAndT):
+                constResults=torch.zeros([exStatesInputAndUAndT.shape[0],exStatesInputAndUAndT.shape[1],exStatesInputAndUAndT.shape[2],2], dtype=torch.float32) #2是const的数量,即predictionStateNumber.to(self.device)#1是const的数量
+                h=exStatesInputAndUAndT[:,:,:,3:4]
                 constraint1=1-h
                 constraint2=h-10
-                # constraint3=313-t3
-                # constraint4=t3-323
-
-                constResults[:,:,0:1]=constraint1
-                constResults[:,:,1:2]=constraint2
+                constResults[:,:,:,0:1]=constraint1
+                constResults[:,:,:,1:2]=constraint2
                 # constResults[:,:,2:3]=constraint3
                 # constResults[:,:,3:4]=constraint4                
-
                 constResultsRelu=torch.relu(constResults)
                 # constResultFlag=constResultsRelu.clone()
                 # constResultFlag[constResultFlag==0]=1
@@ -467,10 +364,10 @@ class DeepSVDDTrainer(BaseTrainer):
 
                 constResultsReluSum1=torch.sum(constResultsRelu,dim=2)
                 #constResultsReluSum2=torch.prod(constResultsReluSum1,dim=1)
-                constResultsReluSum2=torch.sum(constResultsReluSum1,dim=1)
-                return constResultsReluSum2
+                constResultsReluSum2=torch.sum(constResultsReluSum1,dim=2)
+                constResultsReluSum3=torch.prod(constResultsReluSum2,dim=1)
+                return constResultsReluSum3
             return constraint   
-
 
         # elif dataForConstraintsChoice=='mine_reactorCooler_5d':
         #     def constraint(theta,z,stateModel):
@@ -502,37 +399,18 @@ class DeepSVDDTrainer(BaseTrainer):
 ###############################################################################
 
     def stateModelFunction(self,dataForConstraintsChoice):
-        if dataForConstraintsChoice=='mine':
-            #dataRoot='./optim/heatExchangerStates2.pt'
-            dataRoot='./optim/heatExchangerStates3.pt'
-            HENStateModel = HENState().to(self.device)
-            HENStateModel.load_state_dict(torch.load(dataRoot))
-            return HENStateModel
-
-        elif dataForConstraintsChoice=='mine_heater_1d':
-            #dataRoot='./optim/heatExchangerStates2.pt'
-            dataRoot='./optim/heatExchangerStates3.pt'
-            HENStateModel = HENState().to(self.device)
-            HENStateModel.load_state_dict(torch.load(dataRoot))
-            return HENStateModel
+        # if dataForConstraintsChoice == 'mine_dynamic_1dtheta_noControl':
+        #     dataRoot = './optim/buffer_noControl.pt'
+        #     BF1DStateModel = Buffer().to(self.device)
+        #     BF1DStateModel.load_state_dict(torch.load(dataRoot))
+        #     return BF1DStateModel
         
-        elif dataForConstraintsChoice=='mine_reactorCooler_2d':
-            dataRoot='./optim/partData3StepTrain_model.pt'
-            RC2DStateModel = RC2DState().to(self.device)
-            RC2DStateModel.load_state_dict(torch.load(dataRoot))
-            return RC2DStateModel
-
-        elif dataForConstraintsChoice == 'mine_reactorCooler_5d':
-            dataRoot = './optim/partData3StepTrain_model_5d.pt'
-            RC5DStateModel = RC5DState().to(self.device)
-            RC5DStateModel.load_state_dict(torch.load(dataRoot))
-            return RC5DStateModel
-        
-        elif dataForConstraintsChoice == 'mine_dynamic_1dtheta_noControl':
-            dataRoot = './optim/buffer_noControl.pt'
-            BF1DStateModel = Buffer().to(self.device)
+        if dataForConstraintsChoice == 'mine_dynamic_1dtheta_Control':
+            dataRoot = './optim/buffer_Control.pt'
+            BF1DStateModel = BufferControl().to(self.device)
             BF1DStateModel.load_state_dict(torch.load(dataRoot))
             return BF1DStateModel
+        
 
             # def init_center_c(self, train_loader: DataLoader, net: BaseNet, eps=0.1):
     #     """Initialize hypersphere center c as the mean from an initial forward pass on the data."""
